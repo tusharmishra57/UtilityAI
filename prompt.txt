@@ -1,0 +1,1047 @@
+
+# Final Project
+
+## **UtilityAI — AI-Powered Electricity Billing & Consumption Analytics Platform**
+
+### In one sentence
+
+> A web-based electricity utility platform where customers can view their electricity consumption and bills, make simulated payments, and interact with an AI assistant that analyzes their consumption and answers questions using utility documents and customer billing data.
+
+The important part is that this is **not just a CRUD billing website**.
+
+The project demonstrates:
+
+* Relational database design
+* PostgreSQL optimization
+* Data integrity
+* Customer consumption analytics
+* Vector search
+* RAG
+* AI + database integration
+* REST API development
+
+---
+
+# 1. What problem are you solving?
+
+A traditional electricity customer portal mainly shows:
+
+```text
+Consumption
+Bills
+Payments
+```
+
+but the customer still has to manually understand the information.
+
+For example, a customer might see:
+
+> July consumption: 245 kWh
+> August consumption: 270 kWh
+> August bill: ₹2,050
+
+But the system doesn't explain:
+
+> **"Why did my bill increase?"**
+
+or:
+
+> **"How can I reduce my electricity consumption?"**
+
+or:
+
+> **"What are the rules regarding my electricity bill?"**
+
+### Your system solves this by combining:
+
+**Customer utility data + relational database + analytics + AI/RAG.**
+
+So instead of simply displaying data, the system can turn that data into useful information.
+
+---
+
+# 2. What exactly are you building?
+
+The application has **four main parts**.
+
+### Part 1 — Customer Portal
+
+Customer can:
+
+* Register/login
+* View dashboard
+* View monthly consumption
+* View bills
+* View payment history
+
+---
+
+### Part 2 — Billing System
+
+The system stores:
+
+```
+Customer
+   ↓
+Monthly consumption
+   ↓
+Bill
+   ↓
+Payment
+```
+
+For example:
+
+```
+Customer: Rahul
+
+June      210 kWh     ₹1,550
+July      245 kWh     ₹1,820
+August    270 kWh     ₹2,050
+```
+
+Payment is **simulated**. You don't need to integrate a real payment gateway.
+
+---
+
+### Part 3 — Consumption Analytics
+
+The backend calculates things such as:
+
+```
+Current consumption
+Previous consumption
+Percentage increase/decrease
+Average consumption
+```
+
+For example:
+
+> Your electricity consumption increased by **10.2%** compared with the previous month.
+
+This analysis is primarily done using **backend/database queries**, not by asking an LLM to perform basic arithmetic.
+
+That's an important design decision.
+
+---
+
+### Part 4 — Energy Assist
+
+The customer can ask:
+
+> Why did my electricity consumption increase?
+
+The system combines:
+
+```
+Customer's consumption data
++
+Relevant utility information
++
+LLM
+```
+
+to generate the answer.
+
+For example:
+
+> Your consumption increased from 245 kWh in July to 270 kWh in August, an increase of approximately 10.2%. According to the available energy-saving guidelines, reducing prolonged use of high-consumption appliances can help lower your consumption.
+
+---
+
+# 3. Overall architecture
+
+```
+                    CUSTOMER
+                       │
+                       ▼
+                React Web App
+                       │
+                       │ REST API
+                       ▼
+                 FastAPI Backend
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+             ▼                   ▼
+        PostgreSQL            AI/RAG
+             │                   │
+     ┌───────┼────────┐          │
+     │       │        │          ▼
+     ▼       ▼        ▼       pgvector
+ Customers Consumption Bills     │
+                       │         │
+                       ▼         │
+                    Payments     │
+                                 │
+                           Utility Documents
+                                 │
+                                 ▼
+                               LLM
+                                 │
+                                 ▼
+                              Response
+```
+
+---
+
+# 4. Technology stack
+
+## Frontend
+
+### React.js
+
+You don't need to make the frontend extremely complicated.
+
+Main screens:
+
+```
+Login
+Dashboard
+Consumption
+Bills
+Payments
+AI Assistant
+```
+
+---
+
+# 5. Backend
+
+## Python + FastAPI
+
+The backend handles:
+
+```
+Authentication
+Customer requests
+Consumption
+Billing
+Payments
+Analytics
+AI/RAG
+Database communication
+```
+
+Example APIs:
+
+```
+POST /auth/login
+
+GET /consumption
+
+GET /bills
+
+GET /payments
+
+GET /analytics/consumption
+
+POST /ai/ask
+```
+
+
+---
+
+# 6. Database
+
+## PostgreSQL
+
+Your relational schema will contain:
+
+```
+customers
+consumption
+bills
+payments
+documents
+```
+
+### Relationship
+
+```
+                 customers
+                 /       \
+                /         \
+               ▼           ▼
+        consumption       bills
+                            │
+                            ▼
+                         payments
+
+
+                        documents
+                            │
+                            ▼
+                         pgvector
+```
+
+
+# 7. Database design
+
+## customers
+
+```
+id
+name
+email
+password_hash
+created_at
+```
+
+---
+
+## consumption
+
+```
+id
+customer_id
+month
+consumption_kwh
+```
+
+Relationship:
+
+```
+customers 1 ─────── N consumption
+```
+
+One customer can have many monthly consumption records.
+
+---
+
+## bills
+
+```
+id
+customer_id
+billing_month
+consumption_kwh
+amount
+status
+due_date
+```
+
+---
+
+## payments
+
+```
+id
+bill_id
+amount
+transaction_id
+status
+payment_date
+```
+
+Relationship:
+
+```
+bill 1 ─────── N payments
+```
+
+Although in the normal successful-payment flow there would typically be one successful payment, keeping the relationship flexible allows failed/retried payment records.
+
+---
+
+# 10. Database integrity
+
+You will use:
+
+### Primary keys
+
+Uniquely identify records.
+
+### Foreign keys
+
+For example:
+
+```
+consumption.customer_id
+        ↓
+customers.id
+```
+
+### NOT NULL
+
+Important fields cannot be empty.
+
+### UNIQUE
+
+For example:
+
+```
+customer.email
+```
+
+### CHECK
+
+For example:
+
+```sql
+consumption_kwh >= 0
+```
+
+and:
+
+```sql
+amount >= 0
+```
+
+This prevents invalid data from entering the database.
+
+---
+
+# 11. Indexing
+
+You don't need 20 indexes.
+
+Create a few **meaningful indexes**.
+
+For example:
+
+```sql
+CREATE INDEX idx_consumption_customer_month
+ON consumption(customer_id, month);
+```
+
+Why?
+
+Because a very common query will be:
+
+> Give me the consumption history for customer X ordered by month.
+
+Instead of scanning the entire table, PostgreSQL can use the index to locate relevant records more efficiently.
+
+---
+
+# 12. Query optimization
+Suppose you have:
+
+```sql
+SELECT *
+FROM consumption
+WHERE customer_id = 101
+ORDER BY month;
+```
+
+You can examine the execution plan:
+
+```sql
+EXPLAIN ANALYZE
+SELECT ...
+```
+
+
+# 13. Transactions
+
+Use a database transaction for payment.
+
+Conceptually:
+
+```
+Payment request
+      ↓
+BEGIN TRANSACTION
+      ↓
+Create payment record
+      ↓
+Update bill status
+      ↓
+COMMIT
+```
+
+If something fails:
+
+```
+ROLLBACK
+```
+
+This is important because you don't want:
+
+```
+Payment created
+BUT
+Bill still says UNPAID
+```
+
+The two operations should remain consistent.
+
+---
+
+# 14. Backup
+
+Keep this very basic.
+
+Use PostgreSQL:
+
+```
+pg_dump
+```
+
+to create a database backup.
+
+Then:
+
+```
+pg_restore
+```
+
+to restore it.
+
+Your project documentation can show:
+
+```
+Production DB
+      ↓
+   pg_dump
+      ↓
+ backup.sql
+      ↓
+   pg_restore
+      ↓
+New PostgreSQL DB
+```
+
+This gives you a practical database administration concept without making the project huge.
+
+---
+
+# 15. Now the AI part
+
+The AI component has **two sources of information**.
+
+### Source 1 — Customer's structured data
+
+From PostgreSQL:
+
+```
+Consumption
+Bills
+Payments
+```
+
+### Source 2 — Utility documents
+
+For example:
+
+```
+billing_guide.txt
+energy_saving.txt
+payment_policy.txt
+```
+
+These documents are used for RAG.
+
+
+# 16. Why pgvector?
+
+Instead of introducing another vector database, use:
+
+```text
+PostgreSQL
+     +
+pgvector
+```
+
+This is a very good design decision for this project.
+
+Your structured data stays in PostgreSQL:
+
+```
+customers
+consumption
+bills
+payments
+```
+
+and the document embeddings can also be stored there.
+
+Therefore:
+
+> **One database handles both relational data and vector search.**
+
+
+
+# 18. RAG pipeline
+
+## Document ingestion
+
+```
+Utility Documents
+       ↓
+Extract text
+       ↓
+Split into chunks
+       ↓
+Generate embeddings
+       ↓
+Store embeddings
+       ↓
+PostgreSQL + pgvector
+```
+
+---
+
+## Query time
+
+User asks:
+
+> "How can I reduce my electricity bill?"
+
+```
+User Question
+      ↓
+Generate question embedding
+      ↓
+Vector similarity search
+      ↓
+Retrieve top relevant chunks
+      ↓
+Construct prompt
+      ↓
+LLM
+      ↓
+Answer
+```
+
+---
+
+# 19. How customer-specific questions work
+
+Suppose the customer asks:
+
+> "Why is my bill higher this month?"
+
+Don't simply send that question to the vector database.
+
+The system first retrieves the customer's structured data:
+
+```
+July:
+245 kWh
+
+August:
+270 kWh
+
+July bill:
+₹1,820
+
+August bill:
+₹2,050
+```
+
+Backend calculates:
+
+```
+Consumption increase
+= (270 - 245) / 245 × 100
+≈ 10.2%
+```
+
+Then the AI receives this information.
+
+So:
+
+```
+User Question
+      │
+      ├───────────────┐
+      ▼               ▼
+PostgreSQL        RAG Search
+      │               │
+      ▼               ▼
+Customer data    Utility information
+      │               │
+      └───────┬───────┘
+              ▼
+             LLM
+              │
+              ▼
+          Final Answer
+```
+
+This is the **core methodology of your project**.
+
+---
+
+# 20. Why calculate numbers in the backend?
+
+This is an important engineering decision.
+
+Don't ask the LLM:
+
+> "Calculate the percentage increase."
+
+Instead:
+
+```
+Backend → calculation
+LLM → explanation
+```
+
+Why?
+
+LLMs can make arithmetic mistakes.
+
+So:
+
+```
+Deterministic operation → Python/backend
+Natural-language explanation → LLM
+```
+
+
+---
+
+# 21. Complete project flow
+
+Let's take an actual user.
+
+### Step 1 — Login
+
+```
+Customer
+   ↓
+React
+   ↓
+POST /auth/login
+   ↓
+FastAPI
+   ↓
+PostgreSQL
+   ↓
+Authentication
+   ↓
+Dashboard
+```
+
+---
+
+### Step 2 — Dashboard
+
+React requests:
+
+```
+GET /consumption
+GET /bills
+```
+
+FastAPI queries PostgreSQL.
+
+```
+PostgreSQL
+     ↓
+Consumption + Bills
+     ↓
+FastAPI
+     ↓
+React Dashboard
+```
+
+---
+
+### Step 3 — Customer checks consumption
+
+```
+React
+ ↓
+GET /consumption
+ ↓
+FastAPI
+ ↓
+PostgreSQL
+ ↓
+Monthly consumption
+ ↓
+React
+```
+
+Dashboard could display:
+
+```
+June       210 kWh
+July       245 kWh
+August     270 kWh
+```
+
+A simple chart can visualize this.
+
+---
+
+# 22. Step 4 — Customer checks bill
+
+```
+React
+ ↓
+GET /bills
+ ↓
+FastAPI
+ ↓
+PostgreSQL
+ ↓
+Bill
+ ↓
+React
+```
+
+Example:
+
+```
+August Bill
+
+Consumption: 270 kWh
+Amount: ₹2,050
+Status: UNPAID
+Due Date: 20 Aug
+```
+
+---
+
+# 23. Step 5 — Customer pays
+
+```
+Customer
+    ↓
+Click Pay
+    ↓
+React
+    ↓
+POST /payments
+    ↓
+FastAPI
+    ↓
+BEGIN TRANSACTION
+    ↓
+Create payment
+    ↓
+Update bill
+    ↓
+COMMIT
+    ↓
+Success response
+    ↓
+React
+```
+
+Now:
+
+```
+Bill:
+UNPAID
+   ↓
+PAID
+```
+
+---
+
+# 24. Step 6 — Customer asks AI
+
+Customer:
+
+> "Why did my bill increase?"
+
+Backend:
+
+```
+Question
+   ↓
+Identify customer
+   ↓
+Get consumption from PostgreSQL
+   ↓
+Calculate change
+   ↓
+Retrieve relevant utility information
+   ↓
+Build prompt
+   ↓
+LLM
+   ↓
+Answer
+```
+
+Example answer:
+
+> Your consumption increased from 245 kWh in July to 270 kWh in August, which is approximately a 10.2% increase. Higher usage is therefore the primary reason for the increase in your bill.
+
+---
+
+# 25. Step 7 — General utility question
+
+Customer:
+
+> "What are some ways to reduce electricity consumption?"
+
+Now:
+
+```
+Question
+   ↓
+Embedding
+   ↓
+pgvector
+   ↓
+Retrieve relevant energy-saving documents
+   ↓
+LLM
+   ↓
+Answer
+```
+
+This demonstrates the RAG component.
+
+---
+
+# 26. The complete methodology
+
+Your methodology can be explained in **six stages**.
+
+### Stage 1 — Data modeling
+
+Design relational schema:
+
+```text
+Customer
+Consumption
+Bills
+Payments
+```
+
+Normalize the schema and define constraints.
+
+---
+
+### Stage 2 — Backend development
+
+Create REST APIs using FastAPI.
+
+```text
+Authentication
+Consumption
+Billing
+Payments
+Analytics
+AI
+```
+
+---
+
+### Stage 3 — Database optimization
+
+Identify important queries.
+
+```
+Query
+ ↓
+EXPLAIN ANALYZE
+ ↓
+Index
+ ↓
+EXPLAIN ANALYZE
+```
+
+---
+
+### Stage 4 — AI knowledge base
+
+```
+Documents
+ ↓
+Chunking
+ ↓
+Embeddings
+ ↓
+pgvector
+```
+
+---
+
+### Stage 5 — RAG
+
+```
+Question
+ ↓
+Embedding
+ ↓
+Similarity search
+ ↓
+Relevant context
+ ↓
+LLM
+ ↓
+Answer
+```
+
+---
+
+### Stage 6 — Integration
+
+Finally combine:
+
+```
+React
+ ↓
+FastAPI
+ ↓
+PostgreSQL
+ ↓
+AI/RAG
+```
+
+---
+
+# 27. Final technology stack
+
+| Layer           | Technology                | Why                                          |
+| --------------- | ------------------------- | -------------------------------------------- |
+| Frontend        | React                     | Interactive dashboard                        |
+| Backend         | FastAPI                   | Lightweight REST API + Python AI integration |
+| Language        | Python                    | Backend + AI ecosystem                       |
+| Database        | PostgreSQL                | Structured relational utility data           |
+| Vector search   | pgvector                  | Semantic search inside PostgreSQL            |
+| Embeddings      | Sentence Transformers     | Convert documents/questions into vectors     |
+| AI              | LLM                       | Natural-language responses                   |
+| API             | REST                      | Communication between frontend/backend       |
+| DB optimization | EXPLAIN ANALYZE + indexes | Query performance analysis                   |
+| Backup          | pg_dump / pg_restore      | Basic database recovery                      |
+
+---
+
+
+
+# 29. What you are NOT claiming
+
+This is important.
+
+You are **not** building:
+
+```text
+❌ Real electricity meter infrastructure
+❌ Real payment gateway
+❌ Smart-grid management
+❌ IoT infrastructure
+❌ Distributed database
+❌ PostgreSQL cluster
+❌ Enterprise-scale HA
+❌ Complex AI agent
+❌ Advanced ML forecasting
+```
+
+It's a **focused student project demonstrating database + AI engineering**.
+
+That makes it much easier to finish and, more importantly, **you can actually explain every part of it in an interview.**
+
+---
+
+# 30. The one-line project explanation for your interview
+
+If the interviewer says:
+
+> **"Tell me about your project."**
+
+Start with:
+
+> **"I built a simplified AI-powered electricity utility platform that manages customer consumption, billing and payments using PostgreSQL, and adds a RAG-based AI assistant that combines structured customer data with utility documents to answer customer questions. I focused particularly on relational database design, data integrity, indexing and query optimization, while using pgvector to demonstrate how the same PostgreSQL platform can support semantic search and RAG."**
+
+That gives the interviewer **Database + AI + Utility-domain relevance** in about 30 seconds.
