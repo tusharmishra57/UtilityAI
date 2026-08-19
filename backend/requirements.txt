@@ -6,7 +6,8 @@ sqlalchemy
 psycopg2-binary
 pgvector
 sentence-transformers
-google-generativeai
+google-genai
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+python-dotenv
